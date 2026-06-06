@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -35,6 +36,7 @@ from robotrl.fetch_envs import (
     register_robotrl_fetch_envs,
 )
 from robotrl.fetch_training import (
+    FetchDependencyError,
     FetchLoopConfig,
     FetchTrainingConfig,
     build_fetch_loop_spec,
@@ -175,6 +177,18 @@ class FetchTrainingConfigTest(unittest.TestCase):
             self.assertEqual(spec["env_id"], FETCH_BOX_PLACE_DENSE_ENV_ID)
             self.assertEqual(spec["total_timesteps"], 123)
             self.assertEqual(spec["n_envs"], 2)
+
+    def test_fetch_dependency_check_includes_imageio_for_rollout_gifs(self):
+        def fake_find_spec(module_name):
+            if module_name == "imageio":
+                return None
+            return object()
+
+        with mock.patch("robotrl.fetch_training.importlib.util.find_spec", side_effect=fake_find_spec):
+            with self.assertRaises(FetchDependencyError) as raised:
+                fetch_training._require_fetch_dependencies()
+
+        self.assertIn("imageio", str(raised.exception))
 
     def test_cli_fetch_train_dry_run_writes_spec(self):
         with tempfile.TemporaryDirectory() as tmp:

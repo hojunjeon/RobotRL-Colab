@@ -498,7 +498,7 @@ def _sac_model_kwargs(
 def _require_fetch_dependencies() -> None:
     missing = [
         module
-        for module in ("gymnasium", "gymnasium_robotics", "mujoco", "stable_baselines3")
+        for module in ("gymnasium", "gymnasium_robotics", "imageio", "mujoco", "stable_baselines3")
         if importlib.util.find_spec(module) is None
     ]
     if missing:

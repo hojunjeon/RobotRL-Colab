@@ -35,6 +35,7 @@ from robotrl.fetch_training import (
 )
 from robotrl.harness import TrainingConfig, train
 from robotrl.improvement_loop import ImprovementLoopConfig, run_improvement_loop
+from robotrl.colab import DEFAULT_DRIVE_ARTIFACT_ROOT, sync_colab_run_artifacts, write_colab_preflight
 
 
 def next_run_dir(label: str, *, root: Path = Path("runs/learning")) -> Path:
@@ -116,6 +117,21 @@ def main() -> int:
     improve_parser.add_argument("--target-score", type=int, default=80)
     improve_parser.add_argument("--simulated-gain", type=int, default=15)
     improve_parser.add_argument("--fail-first-planner-call", action="store_true")
+
+    colab_sync_parser = subparsers.add_parser(
+        "colab-sync",
+        help="Copy lightweight and heavyweight run artifacts from Colab local disk to Drive.",
+    )
+    colab_sync_parser.add_argument("--run-dir", type=Path, required=True)
+    colab_sync_parser.add_argument("--drive-artifact-root", type=Path, default=DEFAULT_DRIVE_ARTIFACT_ROOT)
+    colab_sync_parser.add_argument("--dry-run", action="store_true")
+
+    colab_preflight_parser = subparsers.add_parser(
+        "colab-preflight",
+        help="Record Python, dependency, and CUDA runtime details before Colab training.",
+    )
+    colab_preflight_parser.add_argument("--output", type=Path, default=Path("runs/colab/preflight.json"))
+    colab_preflight_parser.add_argument("--strict", action="store_true")
 
     args = parser.parse_args()
     if args.command == "train":
@@ -248,6 +264,25 @@ def main() -> int:
         print(f"success={result.success}")
         print(f"final_score={result.final_score}")
         print(f"iterations={result.iterations_completed}")
+    elif args.command == "colab-sync":
+        result = sync_colab_run_artifacts(
+            args.run_dir,
+            drive_artifact_root=args.drive_artifact_root,
+            dry_run=args.dry_run,
+        )
+        print(f"source={result.source_run_dir}")
+        print(f"destination={result.destination_run_dir}")
+        print(f"copied={','.join(result.copied_entries)}")
+        print(f"missing={','.join(result.missing_entries)}")
+        if result.manifest_path is not None:
+            print(f"manifest={result.manifest_path}")
+    elif args.command == "colab-preflight":
+        result = write_colab_preflight(args.output)
+        print(f"preflight={result.report_path}")
+        print(f"python_ok={result.python_ok}")
+        print(f"missing={','.join(result.missing_packages)}")
+        if args.strict and (not result.python_ok or result.missing_packages):
+            return 1
     return 0
 
 

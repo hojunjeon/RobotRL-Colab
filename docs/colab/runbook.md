@@ -12,6 +12,7 @@ Use this repository for code and lightweight evidence:
 
 ```text
 runs/colab/<run_id>/
+  preflight.json
   fetch_loop_spec.json
   eval_results.json
   checkpoints/          # ignored by git
@@ -30,7 +31,25 @@ MyDrive/RobotRL-Colab/artifacts/<run_id>/
   logs/
 ```
 
+After a dry run, chunk, or stopped run reaches a preservation boundary, copy the local run directory to Drive:
+
+```bash
+python -m robotrl.cli colab-sync \
+  --run-dir runs/colab/run_001_stage1_strict_withdraw_seed7 \
+  --drive-artifact-root /content/drive/MyDrive/RobotRL-Colab/artifacts
+```
+
+The sync command copies specs, eval JSON, models, checkpoints, videos, TensorBoard data, and logs when those entries exist. It also writes `drive_sync/manifest.json` locally and `drive_sync_manifest.json` under the Drive run folder.
+
 ## First Colab Run
+
+After installing `.[fetch]`, record the runtime before tests or training:
+
+```bash
+python -m robotrl.cli colab-preflight \
+  --output runs/colab/dry_run_stage1_strict_withdraw_seed7/preflight.json \
+  --strict
+```
 
 Start with a dry run:
 
@@ -66,6 +85,8 @@ python -m robotrl.cli fetch-loop \
   --visual-approval-poll-interval-seconds 30 \
   --output-dir runs/colab/run_001_stage1_strict_withdraw_seed7
 ```
+
+Sync the run folder to Drive after each completed chunk, pause, rejection, or approval marker update before changing direction.
 
 ## Decision Rules
 

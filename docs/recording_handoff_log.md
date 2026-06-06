@@ -3950,3 +3950,57 @@
 - Decide whether to commit and push the initial RobotRL-Colab contents to GitHub; the remote is connected but content has not been pushed in this step.
 - In Colab, install with `python -m pip install -e '.[fetch]'` before running full Fetch tests or real training.
 - Treat the first Colab run as fresh, not resumed, unless an external checkpoint is supplied later.
+
+## 109 - 2026-06-05 KST - Colab artifact sync path added
+
+### Evidence
+- User requested starting Colab RL environment setup through the harness.
+- Harness roles used:
+  - Planning agent defined the first slice as fresh Colab bootstrap, dry-run artifact generation, and Drive preservation.
+  - RL specialist audited the default `single-random-to-return` curriculum, dependency risks, runtime smoke gaps, and telemetry/visual-gate pitfalls.
+  - QA agent confirmed the main risk was README/notebook/runbook drift around visual approval flags and artifact sync.
+- Local dry-run smoke passed after using a valid Fetch replay-sampling `learning_starts` value:
+  - `python -m robotrl.cli fetch-loop --dry-run --curriculum single-random-to-return --chunk-timesteps 123 --n-envs 2 --learning-starts 1000 --checkpoint-interval 50 --eval-episodes 3 --success-threshold 0.8 --seed 7 --visual-approval-timeout-seconds 12 --visual-approval-poll-interval-seconds 2 --output-dir .omx\colab_setup_dryrun`
+  - wrote `.omx\colab_setup_dryrun\fetch_loop_spec.json` and `.omx\colab_setup_dryrun\eval_results.json`.
+- Local sync smoke passed:
+  - `python -m robotrl.cli colab-sync --run-dir .omx\colab_setup_dryrun --drive-artifact-root .omx\drive_artifacts`
+  - copied `fetch_loop_spec.json` and `eval_results.json` and wrote `drive_sync\manifest.json`.
+
+### Changes
+- Added `robotrl/colab.py` with `sync_colab_run_artifacts`, copying specs, eval JSON, models, checkpoints, videos, TensorBoard data, and logs from a local run folder to a Drive artifact root.
+- Added `python -m robotrl.cli colab-sync`.
+- Added `python -m robotrl.cli colab-preflight` to record Python/package/CUDA runtime details before Colab tests or training.
+- Added `imageio` to the `fetch` extra and Fetch dependency guard because rollout GIF writing imports `imageio.v2`.
+- Updated `notebooks/RobotRL_Colab_Run.ipynb` with shared `DRIVE_ARTIFACT_ROOT`, `DRY_RUN_DIR`, and `RUN_DIR` variables plus strict Colab preflight, dry-run sync, and commented training sync commands.
+- Updated `README.md` and `docs/colab/runbook.md` so the default smoke path includes visual approval timing flags and artifact sync.
+- Added `tests/test_colab.py` for artifact sync behavior, CLI output, preflight JSON output, and notebook structural checks.
+- Ignored `.custom-codex-token-saver/` as local CCTS cache.
+
+### Verification
+- `python -m unittest tests.test_colab tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_dependency_check_includes_imageio_for_rollout_gifs tests.test_fetch_training.FetchTrainingConfigTest.test_cli_fetch_loop_curriculum_dry_run_records_single_random_to_return_path` passed: 7 tests OK.
+- Notebook JSON validation passed for `notebooks/RobotRL_Colab_Run.ipynb`; it now has 7 cells.
+- `python -m robotrl.cli colab-preflight --output .omx\colab_preflight.json` wrote a local report; expected local result was `python_ok=False` and missing Fetch dependencies because this Windows Python is 3.10 and does not have `.[fetch]` installed.
+- After writing `.omx\colab_setup_dryrun\preflight.json`, `python -m robotrl.cli colab-sync --run-dir .omx\colab_setup_dryrun --drive-artifact-root .omx\drive_artifacts --dry-run` reported `fetch_loop_spec.json`, `preflight.json`, and `eval_results.json` as copied entries, with heavyweight entries missing for a dry-run-only folder.
+
+### Next
+- Run the notebook in a fresh Colab session: mount Drive, clone/pull, install `.[fetch]`, run tests, dry-run, and confirm Drive manifest creation under `/content/drive/MyDrive/RobotRL-Colab/artifacts`.
+- Do not start long training until the dry run and artifact sync pass in Colab.
+- Treat the first real run as fresh unless an external checkpoint is supplied.
+
+## 110 - 2026-06-06 KST - r30o-lab started
+
+### Evidence
+- User named the Colab plus local Codex training loop `r30o-lab` and requested starting it.
+- Opened the canonical Colab notebook URL for the current GitHub repo:
+  `https://colab.research.google.com/github/hojunjeon/RobotRL-Colab/blob/main/notebooks/RobotRL_Colab_Run.ipynb`.
+- Created a Codex heartbeat automation named `r30o-lab 30-minute monitor` with id `r30o-lab-30-minute-monitor`.
+- No Colab runtime artifact has been synced yet in this boundary; Drive authorization and `drive.mount("/content/drive")` still require browser-side user approval inside Colab.
+
+### Decision
+- Treat `r30o-lab` as the active operating name for the workflow where Colab runs training and local Codex performs recurring R30O inspection.
+- Start with a Colab dry run and Drive artifact sync before any long training run.
+- Use the R30O classifications `Progress`, `Still ambiguous`, and `Clearly wrong` for each 30-minute Codex judgment.
+
+### Next
+- In Colab, mount Drive, clone or pull `RobotRL-Colab`, install `.[fetch]`, run `colab-preflight`, run the dry-run `fetch-loop`, then run `colab-sync`.
+- After the first Drive sync, inspect `preflight.json`, `fetch_loop_spec.json`, `eval_results.json`, sync manifests, and any video or telemetry evidence before starting long training.

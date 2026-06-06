@@ -67,6 +67,14 @@ Recommended Drive artifact root:
 
 During training, write active output to Colab local disk when possible, then copy run artifacts to Drive at chunk boundaries. Drive is the checkpoint backup, not the hot training filesystem.
 
+Sync a completed dry run or training chunk to Drive with:
+
+```bash
+python -m robotrl.cli colab-sync \
+  --run-dir runs/colab/run_001_stage1_strict_withdraw_seed7 \
+  --drive-artifact-root /content/drive/MyDrive/RobotRL-Colab/artifacts
+```
+
 ## Important Files
 
 - `robotrl/`: migrated RobotRL package and Fetch training logic.
@@ -81,14 +89,18 @@ During training, write active output to Colab local disk when possible, then cop
 Local smoke checks:
 
 ```powershell
+python -m robotrl.cli colab-preflight --output .omx\colab_preflight.json
 python -m unittest discover -s tests
-python -m robotrl.cli fetch-loop --dry-run --curriculum single-random-to-return --chunk-timesteps 50000 --n-envs 6 --learning-starts 10000 --checkpoint-interval 50000 --eval-episodes 20 --success-threshold 0.8 --seed 7 --output-dir runs\colab\dry_run_stage1_strict_withdraw_seed7
+python -m robotrl.cli fetch-loop --dry-run --curriculum single-random-to-return --chunk-timesteps 50000 --n-envs 6 --learning-starts 10000 --checkpoint-interval 50000 --eval-episodes 20 --success-threshold 0.8 --seed 7 --visual-approval-timeout-seconds 1800 --visual-approval-poll-interval-seconds 30 --output-dir runs\colab\dry_run_stage1_strict_withdraw_seed7
+python -m robotrl.cli colab-sync --run-dir runs\colab\dry_run_stage1_strict_withdraw_seed7 --drive-artifact-root .omx\drive_artifacts --dry-run
 ```
 
 Colab smoke checks:
 
 ```bash
+python -m robotrl.cli colab-preflight --output runs/colab/dry_run_stage1_strict_withdraw_seed7/preflight.json --strict
 python -m unittest discover -s tests
-python -m robotrl.cli fetch-loop --dry-run --curriculum single-random-to-return --chunk-timesteps 50000 --n-envs 6 --learning-starts 10000 --checkpoint-interval 50000 --eval-episodes 20 --success-threshold 0.8 --seed 7 --output-dir runs/colab/dry_run_stage1_strict_withdraw_seed7
+python -m robotrl.cli fetch-loop --dry-run --curriculum single-random-to-return --chunk-timesteps 50000 --n-envs 6 --learning-starts 10000 --checkpoint-interval 50000 --eval-episodes 20 --success-threshold 0.8 --seed 7 --visual-approval-timeout-seconds 1800 --visual-approval-poll-interval-seconds 30 --output-dir runs/colab/dry_run_stage1_strict_withdraw_seed7
+python -m robotrl.cli colab-sync --run-dir runs/colab/dry_run_stage1_strict_withdraw_seed7 --drive-artifact-root /content/drive/MyDrive/RobotRL-Colab/artifacts
 ```
 
