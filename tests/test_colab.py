@@ -19,6 +19,7 @@ class ColabArtifactSyncTest(unittest.TestCase):
         self.assertTrue(any("python -m robotrl.cli colab-preflight" in source for source in cell_sources))
         self.assertTrue(any("python -m robotrl.cli fetch-loop --dry-run" in source for source in cell_sources))
         self.assertTrue(any("python -m robotrl.cli colab-sync" in source for source in cell_sources))
+        self.assertFalse(any("\\n" in part for cell in notebook["cells"] for part in cell.get("source", [])))
 
     def test_sync_copies_known_run_artifacts_and_writes_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
