@@ -20,6 +20,17 @@ Do not try to recover an old policy unless an external checkpoint is supplied. S
 train chunk -> save checkpoint -> evaluate -> inspect metrics/video -> continue or branch
 ```
 
+For r30o-lab, keep the responsibilities split:
+
+```text
+GitHub = source of truth for code
+Colab /content = training runtime
+Google Drive = durable artifact store
+Codex = 30-minute R30O operator
+```
+
+Do not run training directly from a Drive-mounted project checkout. Clone or pull into `/content/RobotRL-Colab`, run there, then sync artifacts to Drive at dry-run, chunk, pause, rejection, or approval boundaries.
+
 The practical Colab default is:
 
 ```bash
@@ -67,6 +78,8 @@ Recommended Drive artifact root:
 
 During training, write active output to Colab local disk when possible, then copy run artifacts to Drive at chunk boundaries. Drive is the checkpoint backup, not the hot training filesystem.
 
+If a real Colab MCP runtime-execution tool is available, prefer it over browser clicks for running shell/Python commands in Colab. The architecture remains the same: code comes from GitHub, training runs in `/content`, artifacts go to Drive, and source changes return to GitHub.
+
 Sync a completed dry run or training chunk to Drive with:
 
 ```bash
@@ -81,6 +94,7 @@ python -m robotrl.cli colab-sync \
 - `tests/`: migrated regression tests.
 - `docs/recording_handoff_log.md`: project handoff ledger.
 - `docs/colab/runbook.md`: Colab operating guide.
+- `docs/colab/r30o_lab.md`: r30o-lab role split and operating loop.
 - `docs/RARL_migrated_README.md`: preserved migrated RARL README.
 - `skills/robotrl-colab-handoff/SKILL.md`: local flexible handoff skill for this repo.
 

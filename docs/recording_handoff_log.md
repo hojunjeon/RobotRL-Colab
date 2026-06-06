@@ -4004,3 +4004,29 @@
 ### Next
 - In Colab, mount Drive, clone or pull `RobotRL-Colab`, install `.[fetch]`, run `colab-preflight`, run the dry-run `fetch-loop`, then run `colab-sync`.
 - After the first Drive sync, inspect `preflight.json`, `fetch_loop_spec.json`, `eval_results.json`, sync manifests, and any video or telemetry evidence before starting long training.
+
+## 111 - 2026-06-06 KST - r30o-lab operating split clarified
+
+### Evidence
+- User asked to proceed with the recommended r30o-lab structure after discussing Colab MCP, Drive, GitHub, and local Codex roles.
+- Tool discovery did not expose a direct Colab runtime-execution MCP in this session; available paths are Browser, Google Drive file tools, and local Codex shell.
+- Google Drive root listing did not show an existing `RobotRL-Colab` folder yet, so the first real Drive artifact folder is still expected to be created by Colab mount plus `colab-sync`.
+- Recreated the heartbeat automation `r30o-lab 30-minute monitor` because the earlier automation id was no longer present in the app.
+
+### Changes
+- Added `docs/colab/r30o_lab.md` to define the r30o-lab role split:
+  - GitHub is the code source of truth.
+  - Colab `/content` is the execution workspace.
+  - Google Drive is the durable artifact store.
+  - Codex is the 30-minute R30O operator.
+- Updated `README.md` and `docs/colab/runbook.md` to explicitly reject training directly from a Drive-mounted project checkout.
+- Documented the preferred Colab MCP path when a real runtime-execution tool is available, while keeping the browser launcher notebook as the fallback path.
+- Updated the monitor prompt to look for Drive artifact evidence instead of treating Drive as the active source tree.
+
+### Verification
+- `python -m unittest tests.test_colab tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_dependency_check_includes_imageio_for_rollout_gifs tests.test_fetch_training.FetchTrainingConfigTest.test_cli_fetch_loop_curriculum_dry_run_records_single_random_to_return_path` passed: 7 tests OK.
+
+### Next
+- Push the r30o-lab operating split docs.
+- Use the launcher notebook or a future Colab MCP runtime tool to run the first real Colab dry-run sync.
+- Do not start long training until `preflight.json`, `eval_results.json`, and a Drive sync manifest exist from Colab.

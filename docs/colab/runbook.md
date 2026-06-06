@@ -41,6 +41,21 @@ python -m robotrl.cli colab-sync \
 
 The sync command copies specs, eval JSON, models, checkpoints, videos, TensorBoard data, and logs when those entries exist. It also writes `drive_sync/manifest.json` locally and `drive_sync_manifest.json` under the Drive run folder.
 
+## r30o-lab Runtime Split
+
+r30o-lab uses GitHub, Colab, Drive, and Codex for different jobs:
+
+```text
+GitHub: code source of truth
+Colab /content: execution workspace
+Google Drive: artifact store
+Codex: 30-minute operator and reviewer
+```
+
+Do not run the project directly from `/content/drive/MyDrive/...`. Use Drive for artifacts and backups only. In Colab, clone or pull into `/content/RobotRL-Colab`, install there, write run outputs there, and sync run directories to Drive at boundaries.
+
+If a real Colab MCP runtime-execution tool is available, use it to run the same shell/Python commands in Colab instead of clicking the notebook UI. If it is not available, use `notebooks/RobotRL_Colab_Run.ipynb` as the browser launcher.
+
 ## First Colab Run
 
 After installing `.[fetch]`, record the runtime before tests or training:
