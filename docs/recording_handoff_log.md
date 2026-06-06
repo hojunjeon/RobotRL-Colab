@@ -4030,3 +4030,31 @@
 - Push the r30o-lab operating split docs.
 - Use the launcher notebook or a future Colab MCP runtime tool to run the first real Colab dry-run sync.
 - Do not start long training until `preflight.json`, `eval_results.json`, and a Drive sync manifest exist from Colab.
+
+## 112 - 2026-06-06 KST - Drive-hosted launcher copy created, in-app mount blocked
+
+### Evidence
+- Pushed the r30o-lab operating split to GitHub at commit `8cd856eb056c8d0941251bae84b29ba8c78854c9`.
+- Opened the latest GitHub-backed Colab launcher and used Colab's `Drive로 복사` action.
+- Colab created a Drive-hosted launcher copy:
+  `https://colab.research.google.com/drive/19R_57gDX_tIf6HrcUJjSNGODUA5LOF7B`.
+- Running the Drive-hosted launcher removed the repeated GitHub-source warning, confirming the Drive copy is a better launcher surface.
+- The first cell still reached Colab's Drive mount permission dialog. OAuth consent for `jjohun0@gmail.com` completed to the `Please close this tab / window.` page, but the in-app browser kept the OAuth flow in the same tab and did not propagate credentials back to the Colab runtime.
+- Retrying from the Drive copy repeated the same OAuth flow instead of completing `drive.mount('/content/drive')`.
+
+### Decision
+- Treat the Drive-hosted launcher copy as created and usable, but do not treat Drive mount as verified yet.
+- Stop browser-loop attempts for `drive.mount()` in the in-app browser; further retries are likely to repeat the same credential propagation failure.
+- Next viable execution surfaces are:
+  - a real Colab MCP runtime-execution tool if installed/exposed;
+  - a normal Chrome Colab session where OAuth can return to the notebook tab correctly.
+
+### Verification
+- Local Colab-related tests passed before this boundary: 7 tests OK.
+- The Drive copy URL loaded and displayed the expected launcher cells.
+- No `preflight.json`, `eval_results.json`, or Drive sync manifest has been produced from real Colab yet.
+
+### Next
+- Use the Drive-hosted launcher URL in a normal Chrome Colab session or connect a real Colab MCP runtime tool.
+- After Drive mount succeeds, run clone/pull, install, `colab-preflight`, dry-run `fetch-loop`, and `colab-sync`.
+- Record the first successful Drive sync as the next r30o-lab boundary.
