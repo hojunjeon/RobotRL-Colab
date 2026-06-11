@@ -4058,3 +4058,228 @@
 - Use the Drive-hosted launcher URL in a normal Chrome Colab session or connect a real Colab MCP runtime tool.
 - After Drive mount succeeds, run clone/pull, install, `colab-preflight`, dry-run `fetch-loop`, and `colab-sync`.
 - Record the first successful Drive sync as the next r30o-lab boundary.
+
+## 113 - 2026-06-10 KST - Project-scoped Colab MCP configured
+
+### Evidence
+- User requested finding a Colab MCP and connecting it only to this project, not globally.
+- Found the official Google Colab MCP server: `https://github.com/googlecolab/colab-mcp`.
+- Added project-scoped Codex MCP config at `.codex/config.toml`; no `C:\Users\user\.codex\config.toml` edit was made.
+- Configured `colab-mcp` as a stdio server using:
+  `uvx git+https://github.com/googlecolab/colab-mcp`.
+
+### Verification
+- `python -c "import pathlib, tomllib; tomllib.loads(pathlib.Path('.codex/config.toml').read_text()); print('toml ok')"` passed.
+- `codex mcp list` from `C:\Users\user\Desktop\RobotRL-Colab` listed `colab-mcp` as enabled.
+- `codex mcp get colab-mcp` showed command `uvx`, args `git+https://github.com/googlecolab/colab-mcp`, `startup_timeout_sec=30`, `tool_timeout_sec=300`, and `default_tools_approval_mode=prompt`.
+- `uvx git+https://github.com/googlecolab/colab-mcp --help` ran and showed the ColabMCP help text.
+
+### Boundary
+- This connects the MCP through the project `.codex/config.toml` layer. Current Codex sessions may need reload/restart before the new MCP tools appear.
+- A real Colab browser tab/runtime is still required before Colab MCP can execute notebook commands.
+
+## 114 - 2026-06-10 KST - r30o-lab MCP-first operation specified
+
+### Evidence
+- User asked to make MCP usage concrete for three cases:
+  - when Colab daily usage is reset and a new session starts;
+  - when Codex automates r30o-lab;
+  - when the user interrupts mid-run with a new direction.
+
+### Changes
+- Updated `docs/colab/r30o_lab.md` with an MCP-first operating contract:
+  - browser control is only the bootstrap fallback for opening Colab, selecting runtime, sign-in, and Drive mount approval;
+  - Colab MCP is the preferred control plane after the runtime is alive;
+  - the notebook should stay to four operational cells, with only the training cell edited repeatedly;
+  - start-of-day workflow proves runtime, install, Git commit, run directory, and Drive sync before spending most GPU quota;
+  - automated r30o-lab uses bounded chunks, Drive sync, evidence reading, and exactly one classification;
+  - user intervention is a decision boundary and should be recorded as an operator override.
+- Updated `docs/colab/runbook.md` to point MCP-first users to `docs/colab/r30o_lab.md`.
+- Updated the baseline command in `docs/colab/runbook.md` to prefer `--max-iterations 1` for one bounded chunk per judgment cycle.
+
+### Verification
+- `rg -n "max-iterations|MCP-first|User Intervention|Daily Usage Reset|Automated r30o-lab|colab-mcp|Colab MCP" docs README.md robotrl tests .codex` confirmed the new references and existing CLI option.
+- `python -m robotrl.cli fetch-loop --help | Select-String -Pattern "max-iterations|resume-from|dry-run|output-dir"` confirmed `--max-iterations` is exposed.
+- `python -m unittest tests.test_colab` passed: 5 tests OK.
+
+### Boundary
+- This was a documentation and operating-contract update only. No live Colab runtime, Drive mount, or Colab MCP attachment was exercised in this step.
+
+## 115 - 2026-06-11 KST - r30o-lab adversarial review rerun and reusable skill added
+
+### Evidence
+- User requested a renewed adversarial review with concrete fixes using:
+  - Codex `gpt-5.5`;
+  - Antigravity `Claude Sonnet 4.6 (Thinking)`;
+  - Antigravity `Gemini 3.5 Flash (High)`.
+- Verified Antigravity model labels through logs showing:
+  - `Propagating selected model override to backend: label="Claude Sonnet 4.6 (Thinking)"`;
+  - `Propagating selected model override to backend: label="Gemini 3.5 Flash (High)"`.
+- Ran Codex `gpt-5.5` reviewer as a subagent.
+- Ran both Antigravity reviews through `agyd --prompt ... --model ...`; stdout was empty, so results were recovered from Antigravity transcript files.
+
+### Findings
+- All reviewers agreed the workflow is not ready for live Colab GPU time.
+- Confirmed blockers:
+  - visual approval can wait inside `fetch-loop` before Drive sync;
+  - notebook fallback still does not fully implement the bounded fresh/continue chunk contract;
+  - notebook hides `git pull --ff-only` failures with `|| true`;
+  - `colab-sync` can silently merge artifacts when two source runs share the same folder name;
+  - resume remains a warm start unless replay buffer and task contract are preserved;
+  - `.codex/config.toml` and `uv.lock` tracking policy is unresolved.
+
+### Changes
+- Added `docs/colab/r30o_adversarial_review_2026-06-11.md` with the integrated review report, fixes, verification checks, reviewer agreement, and remediation order.
+- Added local project skill `skills/r30o-adversarial-review/SKILL.md`.
+- Added `skills/r30o-adversarial-review/references/review-contract.md`.
+- Added `skills/r30o-adversarial-review/scripts/extract_agy_review.py` for recovering Antigravity transcript output.
+- Updated `skills/r30o-adversarial-review/agents/openai.yaml`.
+- Updated `AGENTS.md` to route r30o-lab/Colab/MCP adversarial reviews to the local skill.
+
+### Verification
+- `python C:\Users\user\.codex\skills\.system\skill-creator\scripts\quick_validate.py skills\r30o-adversarial-review` passed.
+- `python skills\r30o-adversarial-review\scripts\extract_agy_review.py 02a74d1f-3dab-465f-87c0-1628ddaae944 --output .omx\skill_extract_test_sonnet.md` wrote a transcript extraction file.
+- `python -m unittest tests.test_colab -v` passed: 5 tests OK.
+- `rg -n "r30o-adversarial-review|r30o_adversarial_review_2026-06-11|Claude Sonnet 4.6|Gemini 3.5 Flash|gpt-5.5|extract_agy_review|MCP-first" . --glob '!runs/**' --glob '!.omx/**'` confirmed active references.
+
+### Boundary
+- This step produced review/report/skill artifacts only. It did not implement the remediation fixes or run a live Colab MCP session.
+
+## 116 - 2026-06-11 KST - Local Codex to Colab MCP start gate documented
+
+### Evidence
+- User pointed out that r30o cannot start unless local Codex can actually access Colab, and the operating docs did not explain that path.
+- Project `.codex/config.toml` configures `colab-mcp` with `uvx git+https://github.com/googlecolab/colab-mcp`.
+- Current Codex session exposes the `open_colab_browser_connection` bootstrap tool, but calling it returned `false`, so no live Colab notebook/runtime is currently attached.
+
+### Changes
+- Added `docs/colab/r30o_lab.md` section `Local Codex To Colab Access`.
+- Documented the actual access chain: Codex Desktop -> project `colab-mcp` -> open browser Colab notebook -> attached runtime -> commands in `/content/RobotRL-Colab`.
+- Added a start gate requiring a live browser Colab notebook, selected runtime, Drive authorization, successful `open_colab_browser_connection`, and notebook execution tools before r30o-lab can be treated as MCP-operated.
+- Updated `docs/colab/runbook.md` and `README.md` to point operators to the new start gate.
+
+### Verification
+- `rg -n "Local Codex To Colab Access|open_colab_browser_connection|colab-mcp|start gate" README.md docs\colab\r30o_lab.md docs\colab\runbook.md` confirmed the references.
+
+### Boundary
+- r30o-lab is not ready to start from local Codex in this thread until `open_colab_browser_connection` succeeds against a real Colab browser session and the dynamic notebook execution tools appear.
+
+## 117 - 2026-06-11 KST - r30o execution contract changed to Colab-primary
+
+### Evidence
+- User requested r30o-lab documentation change from local Codex edits -> GitHub -> Colab pull into a Colab-primary model.
+- Desired contract: local Codex controls an open Colab session through `colab-mcp`; r30o execution edits happen inside `/content/RobotRL-Colab`; every Colab-side source edit is committed and pushed immediately; Drive stores artifacts; the local Windows checkout is optional for orchestration/review.
+
+### Changes
+- Updated `README.md` r30o operating model to make `/content/RobotRL-Colab` the required execution/edit workspace and local Codex the MCP operator.
+- Updated `docs/colab/r30o_lab.md` with a `Colab-Primary Source Rule`, replacing local-edit/pull instructions with Colab-side edit, check, commit, and push steps.
+- Updated `docs/colab/runbook.md` with the same Colab-primary operating split.
+- Added `tests.test_colab.ColabArtifactSyncTest.test_docs_define_colab_primary_r30o_source_edit_contract` to guard the source-edit contract and prevent the old local-edit wording from returning.
+
+### Verification
+- `python -m unittest tests.test_colab -v` passed: 6 tests OK.
+- `rg -n "make the smallest code/config change locally|make them locally|local Windows checkout is optional|Colab-primary|commit and push from Colab immediately|Edit files inside `/content/RobotRL-Colab` through Colab MCP|/content/RobotRL-Colab" README.md docs\colab\r30o_lab.md docs\colab\runbook.md tests\test_colab.py` confirmed new references and absence of the old local-edit phrases in `docs/colab/r30o_lab.md`.
+
+### Boundary
+- Documentation and regression tests were updated locally only. No live Colab runtime, Drive mount, Colab MCP attachment, GitHub push, or Colab-side commit was exercised in this step.
+
+## 118 - 2026-06-11 KST - Adversarial review P0/P1 safeguards implemented locally
+
+### Evidence
+- User requested fixes for confirmed r30o-lab adversarial review findings covering MCP timeout realism, Drive mount validation, notebook Git safety, bounded notebook chunks, live MCP tool-list uncertainty, nonblocking visual approval, output-dir reuse, and Drive destination collision behavior.
+- Current project `.codex/config.toml` keeps `tool_timeout_sec=300`, so docs now require bounded MCP commands or explicit notebook/background/manual polling instead of long-lived blocking MCP training calls.
+
+### Changes
+- `colab-sync` now rejects default `/content/drive` writes unless Drive is mounted, rejects same-name destination folders by default, and exposes explicit `--allow-unmounted-drive` and `--allow-merge` overrides.
+- `fetch-loop` now rejects populated output directories by default unless `--resume-from` or `--allow-output-dir-reuse` is supplied.
+- Visual-gated `fetch-loop` runs now default to nonblocking approval: review-ready chunks write pending marker/hash evidence and exit for Drive sync; `--wait-for-visual-approval` is the explicit blocking mode.
+- The Colab launcher notebook now fails loudly on `git pull --ff-only`, prints the active commit hash, and provides bounded fresh and warm-start chunk templates with `--max-iterations 1`.
+- README, runbook, and r30o-lab docs now state the bounded MCP timeout contract, live tool-list check requirement, Drive sync safeguards, output-dir reuse rule, and nonblocking approval flow.
+
+### Verification
+- `python -m unittest tests.test_colab -v` passed: 8 tests OK.
+- Focused fetch-training regression command passed: output-dir rejection, explicit reuse, nonblocking visual-approval helper, success-gate spec, and single-random curriculum dry-run tests OK.
+- Impact audit used `rg` for `allow-unmounted-drive`, `allow-merge`, `allow-output-dir-reuse`, `wait-for-visual-approval`, `nonblocking visual approval`, `tool_timeout_sec`, `tool-list`, `--max-iterations 1`, and the old `git pull --ff-only || true` string across active docs/code/tests. Remaining `|| true` references are in historical adversarial-review and handoff evidence, not the notebook.
+
+### Gaps
+- A full `python -m unittest tests.test_fetch_training -v` run was attempted but failed in pre-existing dependency-gated tests because local `gymnasium` is not installed; the new targeted tests passed without Fetch dependencies.
+- No live Colab runtime, Drive mount, Colab MCP attachment, GitHub push, or real Drive sync was exercised in this local patch.
+
+## 119 - 2026-06-11 KST - Second-review output-dir and Drive-root findings fixed locally
+
+### Evidence
+- User requested only the second-review fixes: separate `--resume-from` from output directory append permission, and reject suspicious Colab-local Drive lookalike roots such as `/content/gdrive`.
+
+### Changes
+- `robotrl/fetch_training.py`: populated `fetch-loop` output directories now require `allow_output_dir_reuse=True` even when `resume_from` is set.
+- `robotrl/colab.py`: artifact roots under `/content` now fail closed unless they are under `/content/drive` or `allow_unmounted_drive=True` is set.
+- `tests/test_fetch_training.py` and `tests/test_colab.py`: added regressions for resume-without-reuse rejection and `/content/gdrive` rejection.
+- `README.md`, `docs/colab/runbook.md`, and `docs/colab/r30o_lab.md`: updated the active operating-policy wording.
+
+### Verification
+- `python -m unittest tests.test_colab -v` passed: 9 tests OK.
+- `python -m unittest tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_loop_rejects_populated_output_dir_without_reuse_override tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_loop_allows_populated_output_dir_with_explicit_override -v` passed: 2 tests OK.
+- Impact audit searched active docs/code/tests for old `--resume-from` reuse wording, `/content/drive` validation wording, `/content/gdrive`, `DEFAULT_COLAB_CONTENT_ROOT`, `_validate_drive_artifact_root`, and `allow_unmounted_drive`. The only stale old-policy line found was preserved historical evidence in this handoff log.
+
+### Gaps
+- No live Colab runtime, Drive mount, Colab MCP attachment, GitHub push, or real Drive sync was exercised in this local patch.
+
+## 122 - 2026-06-11 KST - Project Codex config tracking contract finalized
+
+### Evidence
+- User requested the final remaining P2 only: make project-scoped `.codex/config.toml` reproducible as committed infrastructure, matching docs, without staging unrelated files.
+
+### Changes
+- `.codex/config.toml` was staged with `git add .codex/config.toml`.
+- `tests/test_colab.py` now asserts `git ls-files .codex/config.toml` includes the project config path, alongside the existing sanitized `colab-mcp` checks.
+
+### Verification
+- `python -m unittest tests.test_colab -v` passed: 11 tests OK.
+- `git ls-files .codex/config.toml` returned `.codex/config.toml`.
+- `git status --short .codex` reported only `A  .codex/config.toml`.
+
+### Gaps
+- No other files were staged.
+
+## 121 - 2026-06-11 KST - Final-review live output-dir reuse and Colab MCP bridge fixes
+
+### Evidence
+- User requested final-review remediation only, with owned write scope limited to fetch training/CLI/docs/tests/project config/handoff files.
+- Confirmed unsafe behavior: `_validate_fetch_loop_output_dir()` returned immediately when `allow_output_dir_reuse=True`, so a populated live `fetch-loop` output directory could proceed far enough to overwrite reset iteration/checkpoint/video evidence.
+- Confirmed reproducibility gap: `.codex/config.toml` existed locally as the project `colab-mcp` bridge but was still untracked while docs treated it as project infrastructure.
+
+### Changes
+- `robotrl/fetch_training.py`: changed output-dir validation so populated live/non-dry-run `fetch-loop` directories fail closed even with `allow_output_dir_reuse=True`; the reuse flag now only permits dry-run overwrites of local `fetch_loop_spec.json` / `eval_results.json`.
+- `robotrl/cli.py`: updated `--allow-output-dir-reuse` help text to describe dry-run-only reuse.
+- `README.md`, `docs/colab/r30o_lab.md`, and `docs/colab/runbook.md`: removed live append wording and documented that live run IDs require fresh output directories.
+- `.codex/config.toml`: added a project-scoped safe-to-commit comment and kept only sanitized `colab-mcp` bridge configuration.
+- `tests/test_fetch_training.py`: added regression coverage that non-dry-run populated output dirs raise even with explicit reuse.
+- `tests/test_colab.py`: added project bridge coverage that `.codex/config.toml` exists, contains `colab-mcp`, and has no obvious secret/token fields.
+
+### Verification
+- `python -m unittest tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_loop_rejects_populated_output_dir_without_reuse_override tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_loop_allows_populated_output_dir_with_explicit_override tests.test_fetch_training.FetchTrainingConfigTest.test_fetch_loop_rejects_live_output_dir_reuse_even_with_explicit_override tests.test_colab.ColabArtifactSyncTest.test_docs_define_colab_primary_r30o_source_edit_contract tests.test_colab.ColabArtifactSyncTest.test_project_colab_mcp_config_is_committable_and_sanitized -v` passed: 5 tests OK.
+- `git diff --check` passed with only Git line-ending warnings for already modified files.
+- Impact audit used `rg` for `allow-output-dir-reuse`, `allow_output_dir_reuse`, `dry-run spec/eval`, `dry-run local`, `live run append`, `committed project-scoped`, `committed, sanitized`, `colab-mcp`, `api_key`, `secret`, and `token` across the touched code/docs/tests/config and `.gitignore`.
+
+### Gaps
+- No live Colab runtime, Drive mount, Colab MCP attachment, GitHub push, real Drive sync, or staging was exercised in this local patch.
+- The wider worktree still contains pre-existing modified/untracked files outside this final-review write scope; they were not edited for this work unit.
+
+## 120 - 2026-06-11 KST - Default Drive root override bypass fixed locally
+
+### Evidence
+- User requested one remaining confirmed P1 fix only: `--allow-unmounted-drive` must not bypass mount validation for default `/content/drive/...` artifact roots.
+- Prior `_validate_drive_artifact_root()` returned immediately when `allow_unmounted_drive=True`, so `sync_colab_run_artifacts(..., allow_unmounted_drive=True)` could skip Drive mount validation for the default root.
+
+### Changes
+- `robotrl/colab.py`: moved the override behavior so it can allow explicit non-Drive artifact roots, including `/content` lookalikes when explicitly allowed, but not roots under `/content/drive`.
+- `tests/test_colab.py`: added a regression that default-root `sync_colab_run_artifacts(..., allow_unmounted_drive=True)` still raises when `/content/drive` is not mounted.
+- `README.md` and `docs/colab/runbook.md`: clarified that `--allow-unmounted-drive` is for local tests or explicit non-Drive, non-default artifact roots.
+
+### Verification
+- `python -m unittest tests.test_colab -v` passed: 10 tests OK.
+- `git diff --check -- robotrl/colab.py tests/test_colab.py README.md docs/colab/runbook.md` passed with only Git line-ending warnings.
+- Impact audit used `rg` for `allow-unmounted-drive`, `allow_unmounted_drive`, `/content/drive`, `/content/gdrive`, `non-Colab artifact root`, `non-Drive, non-default`, `_validate_drive_artifact_root`, and `DEFAULT_DRIVE_ARTIFACT_ROOT` across the workspace. Active docs/code/tests now match the intended policy; old-policy references remain only as historical handoff evidence.
+
+### Gaps
+- No live Colab runtime, Drive mount, Colab MCP attachment, GitHub push, or real Drive sync was exercised in this local patch.

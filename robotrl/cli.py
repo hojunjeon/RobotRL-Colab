@@ -101,7 +101,13 @@ def main() -> int:
         default="none",
     )
     loop_parser.add_argument("--resume-from", type=Path)
+    loop_parser.add_argument(
+        "--allow-output-dir-reuse",
+        action="store_true",
+        help="Permit dry-run fetch_loop_spec.json/eval_results.json overwrite only; live runs still require a fresh output dir.",
+    )
     loop_parser.add_argument("--dry-run", action="store_true")
+    loop_parser.add_argument("--wait-for-visual-approval", action="store_true")
     loop_parser.add_argument("--visual-approval-timeout-seconds", type=float, default=300.0)
     loop_parser.add_argument("--visual-approval-poll-interval-seconds", type=float, default=5.0)
 
@@ -125,6 +131,8 @@ def main() -> int:
     colab_sync_parser.add_argument("--run-dir", type=Path, required=True)
     colab_sync_parser.add_argument("--drive-artifact-root", type=Path, default=DEFAULT_DRIVE_ARTIFACT_ROOT)
     colab_sync_parser.add_argument("--dry-run", action="store_true")
+    colab_sync_parser.add_argument("--allow-unmounted-drive", action="store_true")
+    colab_sync_parser.add_argument("--allow-merge", action="store_true")
 
     colab_preflight_parser = subparsers.add_parser(
         "colab-preflight",
@@ -232,8 +240,10 @@ def main() -> int:
                     success_threshold=args.success_threshold,
                     max_iterations=args.max_iterations,
                     resume_from=args.resume_from,
+                    allow_output_dir_reuse=args.allow_output_dir_reuse,
                     dry_run=args.dry_run,
                     visual_approval_required=args.curriculum == "single-random-to-return",
+                    visual_approval_wait=args.wait_for_visual_approval,
                     visual_approval_timeout_seconds=args.visual_approval_timeout_seconds,
                     visual_approval_poll_interval_seconds=args.visual_approval_poll_interval_seconds,
                 )
@@ -269,6 +279,8 @@ def main() -> int:
             args.run_dir,
             drive_artifact_root=args.drive_artifact_root,
             dry_run=args.dry_run,
+            allow_unmounted_drive=args.allow_unmounted_drive,
+            allow_merge=args.allow_merge,
         )
         print(f"source={result.source_run_dir}")
         print(f"destination={result.destination_run_dir}")

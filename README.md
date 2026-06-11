@@ -23,19 +23,22 @@ train chunk -> save checkpoint -> evaluate -> inspect metrics/video -> continue 
 For r30o-lab, keep the responsibilities split:
 
 ```text
-GitHub = source of truth for code
-Colab /content = training runtime
+GitHub = source of truth for code, docs, notebooks, and commits
+Colab /content = required r30o execution and edit workspace
 Google Drive = durable artifact store
-Codex = 30-minute R30O operator
+Local Codex = 30-minute operator through colab-mcp
 ```
 
 Do not run training directly from a Drive-mounted project checkout. Clone or pull into `/content/RobotRL-Colab`, run there, then sync artifacts to Drive at dry-run, chunk, pause, rejection, or approval boundaries.
+
+For r30o execution, the local Windows checkout is optional orchestration and review state. It is not required as an edit staging area. When a Colab run needs code, docs, notebook, run policy, or acceptance-criteria changes, make those edits inside `/content/RobotRL-Colab` through Colab MCP, run the nearest Colab-side check, then commit and push from Colab immediately before continuing or treating the runtime as disposable.
 
 The practical Colab default is:
 
 ```bash
 python -m robotrl.cli fetch-loop \
   --curriculum single-random-to-return \
+  --max-iterations 1 \
   --chunk-timesteps 50000 \
   --n-envs 6 \
   --learning-starts 10000 \
@@ -78,7 +81,13 @@ Recommended Drive artifact root:
 
 During training, write active output to Colab local disk when possible, then copy run artifacts to Drive at chunk boundaries. Drive is the checkpoint backup, not the hot training filesystem.
 
-If a real Colab MCP runtime-execution tool is available, prefer it over browser clicks for running shell/Python commands in Colab. The architecture remains the same: code comes from GitHub, training runs in `/content`, artifacts go to Drive, and source changes return to GitHub.
+If a real Colab MCP runtime-execution tool is available, prefer it over browser clicks for running shell/Python commands in Colab. Local Codex reaches Colab through the committed project-scoped `.codex/config.toml` `colab-mcp` bridge and a live browser Colab notebook session; see `docs/colab/r30o_lab.md` for the required start gate. The architecture remains the same: Colab clones from GitHub into `/content/RobotRL-Colab`, training and r30o-driven edits happen there, artifacts go to Drive, and every Colab-side source edit is committed and pushed back to GitHub immediately.
+
+Colab MCP commands must be bounded enough to return within `.codex/config.toml` `tool_timeout_sec` rather than acting as long-lived blocking training supervisors. For longer training, run one bounded chunk that returns, sync artifacts, and continue through notebook/background/manual polling. A live tool-list check is mandatory before each MCP-operated session; docs and tests guard the operating contract, not exact future MCP tool names.
+
+For visual-gated runs, the default is nonblocking visual approval: when a bounded chunk reaches review-ready evidence, `fetch-loop` records the pending approval marker and artifact hash, exits, and lets `colab-sync` upload the evidence before human or reviewer approval. Use `--wait-for-visual-approval` only for an explicitly supervised blocking wait.
+
+Use a fresh output directory for every live `fetch-loop` run ID. `--allow-output-dir-reuse` is only for dry-run local `fetch_loop_spec.json` / `eval_results.json` overwrite; it does not permit live run append, even with `--resume-from`.
 
 Sync a completed dry run or training chunk to Drive with:
 
@@ -87,6 +96,8 @@ python -m robotrl.cli colab-sync \
   --run-dir runs/colab/run_001_stage1_strict_withdraw_seed7 \
   --drive-artifact-root /content/drive/MyDrive/RobotRL-Colab/artifacts
 ```
+
+`colab-sync` refuses Colab-local artifact roots under `/content` unless they are under a mounted `/content/drive`, and refuses to merge into an existing same-name destination unless `--allow-merge` is supplied. Local tests or explicit non-Drive, non-default artifact roots may use `--allow-unmounted-drive`; do not use that flag to bypass a missing Colab Drive mount.
 
 ## Important Files
 

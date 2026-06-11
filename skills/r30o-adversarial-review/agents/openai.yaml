@@ -1,0 +1,4 @@
+interface:
+  display_name: "R30O Adversarial Review"
+  short_description: "Multi-model r30o workflow review"
+  default_prompt: "Use $r30o-adversarial-review to run a multi-model adversarial review of the RobotRL-Colab r30o workflow."

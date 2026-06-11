@@ -1,0 +1,11 @@
+# Project-scoped Colab MCP bridge; keep this file safe to commit.
+[mcp_servers.colab-mcp]
+command = "uvx"
+args = ["git+https://github.com/googlecolab/colab-mcp"]
+startup_timeout_sec = 30
+# Keep MCP commands bounded; long training should run as chunked commands,
+# notebook/background work, or manual polling rather than one blocking MCP call.
+tool_timeout_sec = 300
+enabled = true
+required = false
+default_tools_approval_mode = "prompt"

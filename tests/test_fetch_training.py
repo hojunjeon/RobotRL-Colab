@@ -263,6 +263,69 @@ class FetchTrainingConfigTest(unittest.TestCase):
         self.assertEqual(spec["eval_episodes"], 20)
         self.assertEqual(spec["success_threshold"], 0.8)
         self.assertTrue(spec["continue_until_success"])
+        self.assertFalse(spec["allow_output_dir_reuse"])
+        self.assertFalse(spec["visual_approval_wait"])
+
+    def test_fetch_loop_rejects_populated_output_dir_without_reuse_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            (output_dir / "eval_results.json").write_text("[]\n", encoding="utf-8")
+
+            with self.assertRaises(FileExistsError):
+                fetch_training.run_fetch_loop(
+                    FetchLoopConfig(
+                        output_dir=output_dir,
+                        dry_run=True,
+                    )
+                )
+
+            with self.assertRaises(FileExistsError):
+                fetch_training.run_fetch_loop(
+                    FetchLoopConfig(
+                        output_dir=output_dir,
+                        resume_from=Path("runs/previous/latest_model.zip"),
+                        dry_run=True,
+                    )
+                )
+
+            result = fetch_training.run_fetch_loop(
+                FetchLoopConfig(
+                    output_dir=output_dir,
+                    resume_from=Path("runs/previous/latest_model.zip"),
+                    allow_output_dir_reuse=True,
+                    dry_run=True,
+                )
+            )
+
+            self.assertTrue(result.spec_path.exists())
+
+    def test_fetch_loop_allows_populated_output_dir_with_explicit_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            (output_dir / "fetch_loop_spec.json").write_text("{}", encoding="utf-8")
+
+            result = fetch_training.run_fetch_loop(
+                FetchLoopConfig(
+                    output_dir=output_dir,
+                    allow_output_dir_reuse=True,
+                    dry_run=True,
+                )
+            )
+
+            self.assertTrue(result.spec_path.exists())
+
+    def test_fetch_loop_rejects_live_output_dir_reuse_even_with_explicit_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            (output_dir / "fetch_loop_spec.json").write_text("{}", encoding="utf-8")
+
+            with self.assertRaisesRegex(FileExistsError, "never permits live run append"):
+                fetch_training.run_fetch_loop(
+                    FetchLoopConfig(
+                        output_dir=output_dir,
+                        allow_output_dir_reuse=True,
+                    )
+                )
 
     def test_right_curriculum_loop_uses_shaped_reward_replay_buffer(self):
         spec = build_fetch_loop_spec(
@@ -504,6 +567,7 @@ class FetchTrainingConfigTest(unittest.TestCase):
             self.assertEqual(spec["env_id"], FETCH_BOX_PLACE_BASIC_RANDOM_NARROW_ENV_ID)
             self.assertEqual(spec["replay_buffer"], "DictReplayBuffer")
             self.assertTrue(spec["visual_approval_required"])
+            self.assertFalse(spec["visual_approval_wait"])
             self.assertEqual(spec["visual_approval_timeout_seconds"], 300.0)
             self.assertEqual(spec["visual_approval_poll_interval_seconds"], 5.0)
             self.assertEqual(
@@ -1317,6 +1381,40 @@ class FetchTrainingConfigTest(unittest.TestCase):
                 )
             )
             self.assertEqual(eval_record["visual_approval_status"], "approved")
+
+    def test_visual_approval_ready_record_stays_pending_for_nonblocking_sync(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video_path = Path(tmp) / "rollout.gif"
+            marker_path = Path(tmp) / "rollout.approved.json"
+            video_bytes = b"GIF89a"
+            video_path.write_bytes(video_bytes)
+            eval_record = {
+                "success_rate": 1.0,
+                "episodes": 1,
+                "video_episode_success": 1.0,
+                "video_initial_object_goal_distance": 0.2,
+                "video_object_motion_distance": 0.18,
+                "video_min_gripper_object_distance": 0.02,
+                "video_max_object_lift": 0.1,
+                "video_max_step_object_displacement": 0.02,
+                "video_max_step_object_displacement_without_contact": 0.0,
+                "video_place_return_success": 1.0,
+                "video_return_home_success": 1.0,
+                "visual_approval_required": True,
+                "visual_approval_marker": str(marker_path),
+            }
+
+            self.assertTrue(
+                fetch_training._mark_visual_approval_review_state(
+                    eval_record,
+                    video_path=video_path,
+                    threshold=0.8,
+                )
+            )
+
+            self.assertEqual(eval_record["visual_approval_status"], "pending")
+            self.assertEqual(eval_record["visual_artifact_sha256"], hashlib.sha256(video_bytes).hexdigest())
+            self.assertFalse(is_success_condition_met(eval_record, video_path=video_path, threshold=0.8))
 
     def test_visual_approval_wait_rejects_marker_when_gif_hash_changes(self):
         with tempfile.TemporaryDirectory() as tmp:

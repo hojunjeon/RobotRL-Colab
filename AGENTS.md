@@ -23,3 +23,8 @@ These rules apply inside the RobotRL-Colab project and override global defaults 
 - Preserve checkpoints, specs, eval JSON, videos, and visual approval markers at chunk boundaries.
 - Treat scalar success as insufficient when visual/telemetry gates are relevant.
 - If reward, success contract, observation/action space, HER semantics, or MuJoCo physics changes, branch or restart rather than pretending old checkpoints remain comparable.
+
+## Adversarial Review Routing
+
+- For r30o-lab, Colab/MCP workflow, Drive artifact, visual approval, checkpoint/resume, or operator handoff reviews, use `skills/r30o-adversarial-review/SKILL.md`.
+- The expected reviewer set is Codex `gpt-5.5`, Antigravity `Claude Sonnet 4.6 (Thinking)`, and Antigravity `Gemini 3.5 Flash (High)`.

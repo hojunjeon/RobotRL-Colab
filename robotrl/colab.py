@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import sys
@@ -10,6 +11,9 @@ from pathlib import Path
 
 
 DEFAULT_DRIVE_ARTIFACT_ROOT = Path("/content/drive/MyDrive/RobotRL-Colab/artifacts")
+DEFAULT_COLAB_CONTENT_ROOT = Path("/content")
+DEFAULT_DRIVE_MOUNT_ROOT = Path("/content/drive")
+DEFAULT_DRIVE_MYDRIVE_ROOT = DEFAULT_DRIVE_MOUNT_ROOT / "MyDrive"
 SYNCED_RUN_ENTRIES = (
     "fetch_loop_spec.json",
     "fetch_training_spec.json",
@@ -105,6 +109,8 @@ def sync_colab_run_artifacts(
     *,
     drive_artifact_root: Path = DEFAULT_DRIVE_ARTIFACT_ROOT,
     dry_run: bool = False,
+    allow_unmounted_drive: bool = False,
+    allow_merge: bool = False,
 ) -> ColabSyncResult:
     source_run_dir = run_dir.resolve()
     destination_run_dir = drive_artifact_root.resolve() / source_run_dir.name
@@ -115,6 +121,14 @@ def sync_colab_run_artifacts(
         raise FileNotFoundError(f"run directory does not exist: {source_run_dir}")
     if not source_run_dir.is_dir():
         raise NotADirectoryError(f"run path is not a directory: {source_run_dir}")
+
+    if not dry_run:
+        _validate_drive_artifact_root(drive_artifact_root, allow_unmounted_drive=allow_unmounted_drive)
+        if destination_run_dir.exists() and not allow_merge:
+            raise FileExistsError(
+                "Drive destination already exists; use --allow-merge only when intentionally "
+                f"merging into the existing run artifact folder: {destination_run_dir}"
+            )
 
     for entry_name in SYNCED_RUN_ENTRIES:
         source_entry = source_run_dir / entry_name
@@ -155,6 +169,41 @@ def sync_colab_run_artifacts(
         missing_entries=tuple(missing_entries),
         dry_run=dry_run,
     )
+
+
+def _validate_drive_artifact_root(drive_artifact_root: Path, *, allow_unmounted_drive: bool) -> None:
+    artifact_root = drive_artifact_root.resolve()
+    colab_content_root = DEFAULT_COLAB_CONTENT_ROOT.resolve()
+    drive_mount_root = DEFAULT_DRIVE_MOUNT_ROOT.resolve()
+    if (
+        artifact_root.is_relative_to(colab_content_root)
+        and not artifact_root.is_relative_to(drive_mount_root)
+        and not allow_unmounted_drive
+    ):
+        raise RuntimeError(
+            "Colab artifact roots under /content must be under /content/drive. Complete "
+            "drive.mount('/content/drive') before colab-sync, or pass --allow-unmounted-drive only "
+            "for local tests or explicit non-Drive artifact roots."
+        )
+    if not artifact_root.is_relative_to(drive_mount_root):
+        return
+
+    if not DEFAULT_DRIVE_MOUNT_ROOT.exists():
+        raise RuntimeError(
+            "Google Drive mount is not available at /content/drive. Run drive.mount('/content/drive') "
+            "before colab-sync, or choose an explicit non-Drive, non-default artifact root with "
+            "--allow-unmounted-drive only for local tests."
+        )
+    if not os.path.ismount(DEFAULT_DRIVE_MOUNT_ROOT):
+        raise RuntimeError(
+            "Google Drive path exists but is not mounted at /content/drive. Complete drive.mount('/content/drive') "
+            "before colab-sync, or choose an explicit non-Drive, non-default artifact root with "
+            "--allow-unmounted-drive only for local tests."
+        )
+    if not DEFAULT_DRIVE_MYDRIVE_ROOT.is_dir():
+        raise RuntimeError(
+            "Google Drive mount is missing /content/drive/MyDrive. Complete Drive authorization before colab-sync."
+        )
 
 
 def _package_version(package_name: str) -> str | None:

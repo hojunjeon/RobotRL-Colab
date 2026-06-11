@@ -104,9 +104,11 @@ class FetchLoopConfig:
     success_threshold: float = 0.8
     max_iterations: int | None = None
     resume_from: Path | None = None
+    allow_output_dir_reuse: bool = False
     progress_bar: bool = False
     dry_run: bool = False
     visual_approval_required: bool = False
+    visual_approval_wait: bool = False
     visual_approval_timeout_seconds: float = 300.0
     visual_approval_poll_interval_seconds: float = 5.0
 
@@ -163,8 +165,10 @@ def build_fetch_loop_spec(config: FetchLoopConfig) -> dict[str, object]:
         "success_threshold": config.success_threshold,
         "max_iterations": config.max_iterations,
         "resume_from": None if config.resume_from is None else str(config.resume_from),
+        "allow_output_dir_reuse": config.allow_output_dir_reuse,
         "progress_bar": config.progress_bar,
         "visual_approval_required": config.visual_approval_required,
+        "visual_approval_wait": config.visual_approval_wait,
         "visual_approval_timeout_seconds": config.visual_approval_timeout_seconds,
         "visual_approval_poll_interval_seconds": config.visual_approval_poll_interval_seconds,
         "continue_until_success": config.max_iterations is None,
@@ -329,6 +333,20 @@ def _wait_for_visual_approval(
         sleep(min(poll_interval, max(0.0, deadline - float(monotonic()))))
 
 
+def _mark_visual_approval_review_state(
+    eval_record: dict[str, object],
+    *,
+    video_path: Path,
+    threshold: float,
+) -> bool:
+    eval_record.setdefault("visual_artifact_sha256", _file_sha256(video_path))
+    if not _visual_ready_for_approval(eval_record, video_path=video_path, threshold=threshold):
+        eval_record["visual_approval_status"] = "not_ready"
+        return False
+    eval_record["visual_approval_status"] = "pending"
+    return True
+
+
 def _visual_ready_for_approval(eval_record: dict[str, object], *, video_path: Path, threshold: float) -> bool:
     if not bool(eval_record.get("visual_approval_required", False)):
         return False
@@ -384,6 +402,7 @@ def run_fetch_loop(config: FetchLoopConfig) -> FetchLoopResult:
     if config.eval_episodes < 1:
         raise ValueError("eval_episodes must be positive")
 
+    _validate_fetch_loop_output_dir(config)
     config.output_dir.mkdir(parents=True, exist_ok=True)
     spec_path = config.output_dir / "fetch_loop_spec.json"
     eval_path = config.output_dir / "eval_results.json"
@@ -395,6 +414,42 @@ def run_fetch_loop(config: FetchLoopConfig) -> FetchLoopResult:
 
     _require_fetch_dependencies()
     return _run_fetch_loop_with_dependencies(config, spec_path, eval_path)
+
+
+FETCH_LOOP_RUN_ARTIFACT_ENTRIES = (
+    "fetch_loop_spec.json",
+    "eval_results.json",
+    "latest_model.zip",
+    "final_model.zip",
+    "success_model.zip",
+    "checkpoints",
+    "videos",
+    "tensorboard",
+    "logs",
+    "drive_sync",
+)
+
+FETCH_LOOP_DRY_RUN_REUSABLE_ENTRIES = {
+    "fetch_loop_spec.json",
+    "eval_results.json",
+}
+
+
+def _validate_fetch_loop_output_dir(config: FetchLoopConfig) -> None:
+    existing_artifacts = [name for name in FETCH_LOOP_RUN_ARTIFACT_ENTRIES if (config.output_dir / name).exists()]
+    if existing_artifacts:
+        if (
+            config.dry_run
+            and config.allow_output_dir_reuse
+            and set(existing_artifacts).issubset(FETCH_LOOP_DRY_RUN_REUSABLE_ENTRIES)
+        ):
+            return
+        raise FileExistsError(
+            "fetch-loop output_dir already contains run artifacts; choose a new run directory. "
+            "--resume-from only warm-starts model weights. --allow-output-dir-reuse is limited to "
+            f"dry-run spec/eval overwrites and never permits live run append: {config.output_dir} "
+            f"({', '.join(existing_artifacts)})"
+        )
 
 
 def _validate_fetch_learning_starts(learning_starts: int, *, n_envs: int) -> None:
@@ -681,19 +736,30 @@ def _run_fetch_loop_with_dependencies(config: FetchLoopConfig, spec_path: Path, 
                 eval_record["visual_approval_status"] = "pending"
             eval_records.append(eval_record)
             _write_eval_records(eval_path, eval_records)
-            if config.visual_approval_required and _visual_ready_for_approval(
-                eval_record,
-                video_path=last_video_path,
-                threshold=config.success_threshold,
-            ):
-                _wait_for_visual_approval(
+            if config.visual_approval_required:
+                visual_ready = _mark_visual_approval_review_state(
                     eval_record,
                     video_path=last_video_path,
                     threshold=config.success_threshold,
-                    timeout_seconds=config.visual_approval_timeout_seconds,
-                    poll_interval_seconds=config.visual_approval_poll_interval_seconds,
                 )
                 _write_eval_records(eval_path, eval_records)
+                if visual_ready and not config.visual_approval_wait:
+                    return FetchLoopResult(
+                        spec_path=spec_path,
+                        eval_path=eval_path,
+                        model_path=last_model_path,
+                        video_path=last_video_path,
+                        success=False,
+                    )
+                if visual_ready:
+                    _wait_for_visual_approval(
+                        eval_record,
+                        video_path=last_video_path,
+                        threshold=config.success_threshold,
+                        timeout_seconds=config.visual_approval_timeout_seconds,
+                        poll_interval_seconds=config.visual_approval_poll_interval_seconds,
+                    )
+                    _write_eval_records(eval_path, eval_records)
             stage_success = is_success_condition_met(
                 eval_record,
                 video_path=last_video_path,
